@@ -1,0 +1,40 @@
+{
+  "id": "physics.momentum",
+  "version": "0.1.0",
+  "subject": "Physics",
+  "concept": "Momentum",
+  "prerequisites": [
+    "speed",
+    "mass"
+  ],
+  "activities": [
+    {
+      "id": "same-push",
+      "mechanic": "push-and-observe",
+      "goal": "notice mass affects resulting speed"
+    },
+    {
+      "id": "hard-to-stop",
+      "mechanic": "predict-and-test",
+      "goal": "stopping difficulty depends on m and v",
+      "reveals": "p = m × v"
+    },
+    {
+      "id": "hit-target",
+      "mechanic": "tune-to-target",
+      "goal": "same momentum from different m,v pairs",
+      "mastery": "two successes with different masses"
+    },
+    {
+      "id": "crash",
+      "mechanic": "predict-and-observe",
+      "goal": "conservation of momentum in a sticky collision"
+    },
+    {
+      "id": "transfer",
+      "mechanic": "question",
+      "goal": "apply p = m × v without hints",
+      "mastery": "correct first attempt"
+    }
+  ]
+}
