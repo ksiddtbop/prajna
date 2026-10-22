@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prajna · Momentum</title>
+<style>
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#faf7f0;color:#2b2b2b}
+header{padding:18px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+h1{margin:0;font-size:1.5rem;color:#7a4b1f}
+#map{display:flex;gap:8px}
+.dot{width:34px;height:34px;border-radius:50%;border:2px solid #c9b79c;display:flex;align-items:center;justify-content:center;font-weight:600;background:#fff;cursor:pointer}
+.dot.done{background:#d7a85c;color:#fff;border-color:#d7a85c}.dot.cur{outline:3px solid #7a4b1f}
+main{max-width:860px;margin:0 auto;padding:0 16px 40px}
+canvas{width:100%;background:#fffdf8;border:1px solid #e3d9c6;border-radius:14px}
+#title{font-size:1.25rem;margin:14px 0 4px}#prompt{font-size:1.05rem;line-height:1.6}
+.panel{margin:12px 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font-size:1rem;padding:10px 16px;border-radius:10px;border:1px solid #c9b79c;background:#fff;cursor:pointer}
+button.main{background:#7a4b1f;color:#fff;border-color:#7a4b1f}button:focus-visible{outline:3px solid #2f6fb0}
+#fb{min-height:1.6em;font-weight:600;margin:8px 0}.ok{color:#2e7d32}.no{color:#b23b1e}
+#explain{display:none;background:#fff4e0;border-left:5px solid #d7a85c;padding:12px 16px;border-radius:8px;line-height:1.6}
+label{display:flex;gap:8px;align-items:center}
+</style></head><body>
+<header><h1>Prajna</h1><span>Momentum: from a push to a prediction</span><div id="map" aria-label="Progress"></div></header>
+<main>
+<canvas id="c" width="820" height="280" role="img" aria-label="Animated scene with carts on a track"></canvas>
+<div id="title"></div><div id="prompt"></div>
+<div class="panel" id="ctrl"></div>
+<div id="fb" aria-live="polite"></div>
+<div class="panel"><button id="hint">Hint</button><button id="next" class="main" style="display:none">Next level</button></div>
+<div id="explain"></div>
+</main>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const PX=40; let objs=[],extras=[],anim=null,L=0,done=new Set(),hintI=0;
+const C={a:'#d7a85c',b:'#5b8fb9',c:'#8c6bb1',box:'#a1887f'};
+function cart(x,y,m,v,color,label){return{x,y,m,v,color,label,w:34+m*12,h:26+m*5}}
+function draw(){ctx.clearRect(0,0,cv.width,cv.height);
+ extras.forEach(f=>f());
+ objs.forEach(o=>{ctx.fillStyle='#d9cfbd';ctx.fillRect(0,o.y+10,cv.width,4);
+  ctx.fillStyle=o.color;ctx.beginPath();ctx.roundRect(o.x,o.y-o.h,o.w,o.h,6);ctx.fill();
+  ctx.fillStyle='#333';[o.x+10,o.x+o.w-10].forEach(wx=>{ctx.beginPath();ctx.arc(wx,o.y+4,6,0,7);ctx.fill()});
+  ctx.fillStyle='#fff';ctx.font='bold 13px system-ui';ctx.fillText(o.label,o.x+6,o.y-o.h/2+5);});}
+function run(step,end){cancelAnimationFrame(anim);let last=performance.now(),t=0;
+ const f=n=>{const dt=Math.min(.04,(n-last)/1000);last=n;t+=dt;const fin=step(dt,t);draw();if(fin){end&&end()}else anim=requestAnimationFrame(f)};anim=requestAnimationFrame(f)}
+function bar(x,y,val,max,label,color){ctx.fillStyle='#eee';ctx.fillRect(x,y,200,14);ctx.fillStyle=color;ctx.fillRect(x,y,200*Math.min(1,val/max),14);ctx.fillStyle='#333';ctx.font='13px system-ui';ctx.fillText(label,x+208,y+12)}
+function fb(msg,ok){$('fb').textContent=msg;$('fb').className=ok?'ok':'no'}
+function btn(txt,fn,main){const b=document.createElement('button');b.textContent=txt;if(main)b.className='main';b.onclick=fn;$('ctrl').appendChild(b);return b}
+function slider(lbl,min,max,val,fn){const l=document.createElement('label');l.innerHTML=lbl+' <input type="range" min="'+min+'" max="'+max+'" value="'+val+'"> <b>'+val+'</b>';const i=l.querySelector('input');i.oninput=()=>{l.querySelector('b').textContent=i.value;fn(+i.value)};$('ctrl').appendChild(l);return i}
+function choices(list,correct,okMsg,noMsg){list.forEach((c,i)=>btn(c,()=>{if(i===correct){fb(okMsg,true);win()}else fb(noMsg,false)}))}
+function win(){done.add(L);$('explain').style.display='block';$('explain').innerHTML=levels[L].explain;$('next').style.display=L<levels.length-1?'inline-block':'none';map()}
+function map(){$('map').innerHTML='';levels.forEach((_,i)=>{const d=document.createElement('div');d.className='dot'+(done.has(i)?' done':'')+(i===L?' cur':'');d.textContent=i+1;d.title=levels[i].title;d.onclick=()=>load(i);$('map').appendChild(d)})}
+
+const levels=[
+{title:'1 · The same push',prompt:'Two carts. One is light, one is heavy. Give them exactly the same push and watch.',
+ hints:['Look at how far each cart travels in the same time.','The same push makes a light thing move faster than a heavy thing.'],
+ explain:'<b>What you noticed:</b> the same push made the light cart go fast and the heavy cart go slowly. The push got shared out differently depending on how much "stuff" (mass) there was. Keep this in mind.',
+ setup(){objs=[cart(20,110,1,0,C.a,'1 kg'),cart(20,240,4,0,C.b,'4 kg')];
+  btn('Push both',()=>{objs[0].v=4;objs[1].v=1;run((dt,t)=>{objs.forEach(o=>o.x+=o.v*PX*dt);return t>3.2},ask)},true);
+  function ask(){$('ctrl').innerHTML='';$('prompt').textContent='Which cart moved faster after the same push?';
+   choices(['The light cart','The heavy cart','Both the same'],0,'Yes! Light cart, fast. Heavy cart, slow.','Watch again: which one got further?')}}},
+{title:'2 · Hard to stop',prompt:'Send each cart into the soft wall. The wall pushes back with the same force every time. Which one takes longest to stop?',
+ hints:['Try all three before answering.','Being heavy matters. Being fast matters. What about both?'],
+ explain:'<b>The idea has a name: momentum.</b> How hard something is to stop depends on its mass <i>and</i> its speed together. Physicists write it as <b>momentum = mass × velocity</b> (p = m × v). The heavy, fast cart had the most.',
+ setup(){const opts=[['Heavy, slow',4,1,C.b],['Light, fast',1,4,C.a],['Heavy, fast',4,3,C.c]];let tried={};
+  extras=[()=>{ctx.fillStyle='#f3c6a5';ctx.fillRect(640,120,30,126);ctx.fillStyle='#333';ctx.font='13px system-ui';ctx.fillText('soft wall',635,112)}];
+  objs=[];draw();
+  opts.forEach(([n,m,v,c])=>btn('Send: '+n,()=>{const o=cart(20,240,m,v,c,n);objs=[o];let stopT=null,hit=false;
+   run((dt,t)=>{if(o.x+o.w>=640){hit=true}if(hit){o.v-=3/m*dt;if(o.v<=0){o.v=0;stopT=stopT??t}}o.x+=o.v*PX*dt;return o.v===0},()=>{tried[n]=(m*v/3).toFixed(1);
+    extras[1]=()=>{let y=20;Object.entries(tried).forEach(([k,s])=>{ctx.fillStyle='#333';ctx.font='14px system-ui';ctx.fillText(k+': took '+s+' s to stop',20,y+=20)})};draw();
+    if(Object.keys(tried).length===3)ask()})}));
+  function ask(){$('ctrl').innerHTML='';$('prompt').textContent='Which one was hardest to stop?';
+   choices(['Heavy, slow','Light, fast','Heavy, fast'],2,'Right: heavy AND fast is the hardest to stop.','Look at the stopping times again.')}}},
+{title:'3 · Hit the target',prompt:'The cart hits a box. Get the box to slide into the green zone. Then do it again with a DIFFERENT mass.',
+ hints:['The box cares about mass × speed, not either one alone.','Try mass 2 and speed 3. What other pair multiplies to 6?'],
+ explain:'<b>Different carts, same momentum, same result.</b> 2 kg at 3 m/s and 3 kg at 2 m/s both carry 6 units of momentum, so the box gets the same shove. Momentum is the "amount of motion" something can hand over.',
+ setup(){let m=2,v=2,hits=new Set();const K=0.5,target=6,dist=p=>(p/2)**2/(2*K)*PX/4;
+  const zone=410+dist(target);extras=[()=>{ctx.fillStyle='rgba(76,175,80,.25)';ctx.fillRect(zone-22,150,44,100)},()=>bar(20,20,m*v,25,'momentum = '+m+' × '+v+' = '+m*v,C.a)];
+  const reset=()=>{objs=[cart(20,240,m,0,C.a,m+' kg'),{...cart(380,240,2,0,C.box,'box'),w:30,h:30}];draw()};reset();
+  slider('Mass (kg)',1,5,m,x=>{m=x;reset()});slider('Speed (m/s)',1,5,v,x=>{v=x;reset()});
+  btn('Go',()=>{reset();const c=objs[0],b=objs[1];c.v=v;let hit=false;
+   run(dt=>{if(!hit){c.x+=c.v*PX*dt;if(c.x+c.w>=b.x){hit=true;b.v=m*v/2;c.v=0}}else{b.v=Math.max(0,b.v-K*4*dt);b.x+=b.v*PX/4*dt*4}return hit&&b.v===0},()=>{
+    const cx=b.x+15;if(Math.abs(cx-zone)<24){hits.add(m);fb(hits.size>=2?'Two different masses, same result!':'In the zone! Now try a different mass.',true);if(hits.size>=2)win()}else fb(cx<zone?'Not far enough.':'Too far!',false)})},true)}},
+{title:'4 · The crash',prompt:'Cart A rolls at 3 m/s into cart B, which is standing still. They stick together. Set the masses, predict the speed afterwards, then run it.',
+ hints:['Momentum before = momentum after.','Before: mass A × 3. After: (A + B) × new speed.'],
+ explain:'<b>Momentum is conserved.</b> In a crash, momentum is not lost, it is shared. Total before = total after, so the joined carts move slower because the same momentum is spread over more mass.',
+ setup(){let ma=2,mb=2;const reset=()=>{objs=[cart(20,240,ma,0,C.a,'A '+ma),cart(420,240,mb,0,C.b,'B '+mb)];extras=[];draw();opts()};
+  slider('Mass of A',1,5,ma,x=>{ma=x;reset()});slider('Mass of B',1,5,mb,x=>{mb=x;reset()});
+  const box=document.createElement('div');box.className='panel';$('ctrl').after(box);
+  function opts(){box.innerHTML='Predict the speed after:';const ans=ma*3/(ma+mb);const set=[ans,3,1.5,3*mb/(ma+mb)].map(x=>+x.toFixed(2));const u=[...new Set(set)].sort((a,b)=>a-b);
+   u.forEach(s=>{const b=document.createElement('button');b.textContent=s+' m/s';b.onclick=()=>go(s,+ans.toFixed(2));box.appendChild(b)})}
+  function go(pred,ans){const A=objs[0],B=objs[1];A.v=3;let stuck=false;
+   run((dt,t)=>{if(!stuck&&A.x+A.w>=B.x){stuck=true;A.v=B.v=ans}A.x+=A.v*PX*dt;B.x+=B.v*PX*dt;return t>4.5},()=>{
+    extras=[()=>bar(20,20,ma*3,30,'before: '+ma+' × 3 = '+ma*3,C.a),()=>bar(20,44,(ma+mb)*ans,30,'after: '+(ma+mb)+' × '+ans+' = '+((ma+mb)*ans).toFixed(1),C.b)];draw();
+    if(pred===ans){fb('Spot on. The momentum was shared, not lost.',true);win()}else fb('Not quite. Compare the two bars, then try again.',false)})}
+  reset();$('hint').dataset.cleanup='1';levels[3]._box=box}},
+{title:'5 · On your own',prompt:'No animations, no hints. A 1000 kg car rolls at 2 m/s. A 50 kg runner sprints at 10 m/s. Which has more momentum?',
+ hints:['No hints here: this is where you show what you understood.'],
+ explain:'<b>You got there.</b> Car: 1000 × 2 = 2000. Runner: 50 × 10 = 500. A slow, heavy thing can carry far more momentum than a fast, light one, which is why a slow-rolling car is still dangerous.',
+ setup(){objs=[];extras=[()=>{ctx.fillStyle='#7a4b1f';ctx.font='bold 22px system-ui';ctx.fillText('p = m × v',330,150)}];draw();
+  choices(['The car','The runner','They are equal'],0,'Correct, and without any help.','Think: multiply mass by speed for each.')}}
+];
+function load(i){L=i;hintI=0;cancelAnimationFrame(anim);objs=[];extras=[];$('ctrl').innerHTML='';document.querySelectorAll('main > .panel').forEach((p,k)=>{if(p.id!=='ctrl'&&!p.querySelector('#hint'))p.remove()});
+ $('fb').textContent='';$('explain').style.display='none';$('next').style.display='none';$('title').textContent=levels[i].title;$('prompt').textContent=levels[i].prompt;levels[i].setup();draw();map()}
+$('hint').onclick=()=>{const h=levels[L].hints;fb(h[Math.min(hintI++,h.length-1)],true);$('fb').className=''};
+$('next').onclick=()=>load(L+1);
+load(0);
+</script></body></html>
